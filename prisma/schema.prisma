@@ -1,0 +1,187 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  admin
+  user
+}
+
+enum ImageType {
+  user
+  product
+
+}
+
+enum OTPType {
+  email_verification
+  login_verification
+  password_reset
+  two_factor
+}
+
+enum AccountStatus {
+  active
+  inactive
+  suspended
+  pending_verification
+}
+
+model Image {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  url       String
+  publicId  String?
+  type      ImageType
+  userId       String? @db.Uuid @unique
+  categoryId   String? @db.Uuid @unique
+  productId    String? @db.Uuid
+  subCategoryId String? @db.Uuid @unique
+  brandId      String? @db.Uuid @unique
+  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product     Product?     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String        @unique
+  username        String?       @unique
+  firstName       String
+  lastName        String
+  displayName     String?
+  role            UserRole      @default(user)
+  status          AccountStatus @default(pending_verification)
+  password        String
+  emailVerifiedAt DateTime?
+  bio             String?
+  address         String?
+  phoneNumber     String?
+  avatar          Image?  
+  isDeleted       Boolean       @default(false)
+  lastLoginAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @default(now()) @updatedAt
+  deletedAt       DateTime?
+  otps            OTP[]
+  products        Product[]
+  categories      Category[]
+  subCategories   SubCategory[]
+  cart            Cart?
+}
+
+
+
+model OTP {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identifier String
+  code       Int
+  type       OTPType
+  expiresAt  DateTime
+  verified   Boolean  @default(false)
+  attempts   Int      @default(0)
+
+  userId String? @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([identifier, type, verified])
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+model Category {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String
+  slug          String        @unique
+  description   String?
+
+  subCategory SubCategory[]
+  products      Product[]
+  createdById   String        @db.Uuid
+  createdBy     User          @relation(fields: [createdById], references: [id])
+
+  createdAt     DateTime      @default(now())
+  isDeleted     Boolean       @default(false)
+  deletedAt     DateTime?
+  updatedAt     DateTime      @updatedAt
+}
+
+model SubCategory {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String
+  slug          String    @unique
+  description   String?
+  
+  categoryId    String    @db.Uuid
+  category      Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdById String @db.Uuid
+  createdBy   User   @relation(fields: [createdById], references: [id])
+  products      Product[]
+  isDeleted     Boolean       @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+
+
+model Product {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String
+  slug          String       @unique
+  description   String?
+  price         Decimal      @db.Decimal(10, 2)
+  discount      Decimal?      @default(0)
+  discountPrice Decimal?     @db.Decimal(10, 2)
+  stock         Int          @default(0)
+  quantity      Int          @default(0)
+  images        Image[]  
+  colors        String[]    
+  categoryId    String       @db.Uuid
+  category     Category     @relation(fields: [categoryId], references: [id])
+  
+  subCategoryId String?      @db.Uuid
+  subCategory   SubCategory? @relation(fields: [subCategoryId], references: [id])
+  
+
+  createdById String @db.Uuid
+  createdBy   User   @relation(fields: [createdById], references: [id])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  isDeleted     Boolean       @default(false)
+  deletedAt     DateTime?
+  cartItems     CartItem[]
+  @@index([categoryId])
+  @@index([subCategoryId])
+}
+
+model Cart {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String?    @db.Uuid @unique
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guestId   String?    @unique // Temporary ID for guest users
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cartId    String   @db.Uuid
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String   @db.Uuid
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, productId])
+}
