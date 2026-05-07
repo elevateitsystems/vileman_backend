@@ -63,6 +63,7 @@ model User {
   address         String?
   phoneNumber     String?
   avatar          Image?  
+  cart            Cart?
   isDeleted       Boolean       @default(false)
   lastLoginAt     DateTime?
   createdAt       DateTime      @default(now())
@@ -72,10 +73,7 @@ model User {
   products        Product[]
   categories      Category[]
   subCategories   SubCategory[]
-  cart            Cart?
 }
-
-
 
 model OTP {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -150,6 +148,8 @@ model Product {
   
   subCategoryId String?      @db.Uuid
   subCategory   SubCategory? @relation(fields: [subCategoryId], references: [id])
+  orderItems    OrderItem[]
+  cartItems     CartItem[]
   
 
   createdById String @db.Uuid
@@ -158,30 +158,50 @@ model Product {
   updatedAt     DateTime     @updatedAt
   isDeleted     Boolean       @default(false)
   deletedAt     DateTime?
-  cartItems     CartItem[]
   @@index([categoryId])
   @@index([subCategoryId])
 }
 
+model Order {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  totalAmount     Decimal     @db.Decimal(10, 2)
+  customerEmail   String
+  customerPhone   String
+  stripeSessionId String      @unique
+  paymentStatus   String      // e.g., "paid", "unpaid"
+  items           OrderItem[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId   String  @db.Uuid
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Decimal @db.Decimal(10, 2)
+}
+
+
 model Cart {
   id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String?    @db.Uuid @unique
-  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  guestId   String?    @unique // Temporary ID for guest users
+  userId    String?    @unique @db.Uuid
+  user      User?      @relation(fields: [userId], references: [id])
+  guestId   String?    @unique
   items     CartItem[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 }
 
 model CartItem {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  cartId    String   @db.Uuid
-  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  productId String   @db.Uuid
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  quantity  Int      @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cartId    String  @db.Uuid
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
 
   @@unique([cartId, productId])
 }

@@ -7,7 +7,7 @@ import { CategoryModule } from "./modules/Category/CategoryModule";
 import { SubCategoryModule } from "./modules/SubCategory/SubCategoryModule";
 import { BrandModule } from "./modules/Brand/BrandModule";
 import { ProductModule } from "./modules/Product/ProductModule";
-import { CartModule } from "./modules/Cart/CartModule";
+import { OrderModule } from "./modules/Order/OrderModule";
 // Main application bootstrap function
 async function bootstrap() {
   try {
@@ -24,7 +24,7 @@ async function bootstrap() {
     app.registerModule(new SubCategoryModule());
     app.registerModule(new BrandModule());
     app.registerModule(new ProductModule());
-    app.registerModule(new CartModule());
+    app.registerModule(new OrderModule());
     AppLogger.info("✔ All modules registered successfully");
 
     // Start the server

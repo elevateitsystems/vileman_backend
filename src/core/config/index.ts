@@ -32,6 +32,7 @@ export const config = {
     baseUrl:
       process.env.BASE_URL ||
       `http://192.168.0.166:${process.env.PORT || "3030"}`,
+    clientUrl: process.env.CLIENT_URL || "http://localhost:3000",
   },
   database: {
     url: process.env.DATABASE_URL,
@@ -40,6 +41,10 @@ export const config = {
       min: parseInt(process.env.DB_POOL_MIN || "2"),
       max: parseInt(process.env.DB_POOL_MAX || "10"),
     },
+  },
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY,
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
   },
   security: {
     cors: {
