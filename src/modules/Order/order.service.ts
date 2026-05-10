@@ -6,6 +6,7 @@ import { AppError } from "@/core/errors/AppError";
 import { HTTPStatusCode } from "@/types/HTTPStatusCode";
 import { CheckoutInput } from "./order.validation";
 import { AppLogger } from "@/core/logging/logger";
+import { CountryService } from "@/services/country.service";
 
 export class OrderService extends BaseService<any, any, any> {
   constructor(prisma: PrismaClient) {
@@ -22,7 +23,7 @@ export class OrderService extends BaseService<any, any, any> {
    * Create Stripe Checkout Session
    */
   public async createCheckoutSession(data: CheckoutInput) {
-    const { products, customerEmail, customerPhone } = data;
+    const { products, customerEmail, customerPhone, shippingCountry } = data;
 
     // 1. Fetch products and validate prices
     const productIds = products.map((p) => p.productId);
@@ -41,7 +42,11 @@ export class OrderService extends BaseService<any, any, any> {
       );
     }
 
-    // 2. Prepare line items
+    // 2. Calculate Delivery Charge
+    const deliveryCharge = await CountryService.getDeliveryCharge(shippingCountry);
+    let subtotal = 0;
+
+    // 3. Prepare line items
     const lineItems = products.map((item) => {
       const product = dbProducts.find((p: any) => p.id === item.productId);
       if (!product) {
@@ -54,10 +59,11 @@ export class OrderService extends BaseService<any, any, any> {
 
       // Calculate price (discountPrice if available, else price)
       const unitPrice = product.discountPrice || product.price;
+      subtotal += Number(unitPrice) * item.quantity;
 
       return {
         price_data: {
-          currency: "usd",
+          currency: "eur",
           product_data: {
             name: product.name,
             description: product.description || undefined,
@@ -71,7 +77,23 @@ export class OrderService extends BaseService<any, any, any> {
       };
     });
 
-    // 3. Create Stripe Session
+    // 4. Add delivery charge as a line item
+    lineItems.push({
+      price_data: {
+        currency: "eur",
+        product_data: {
+          name: "Delivery Charge",
+          description: `Shipping to ${shippingCountry}`,
+          metadata: {
+            productId: "delivery",
+          },
+        },
+        unit_amount: Math.round(deliveryCharge * 100),
+      },
+      quantity: 1,
+    });
+
+    // 5. Create Stripe Session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "payment",
@@ -82,7 +104,10 @@ export class OrderService extends BaseService<any, any, any> {
       metadata: {
         customerEmail,
         customerPhone,
-        // Store product info in metadata as stringified JSON (careful with size limits)
+        shippingCountry,
+        deliveryCharge: deliveryCharge.toString(),
+        subtotal: subtotal.toString(),
+        // Store product info in metadata as stringified JSON
         products: JSON.stringify(
           products.map((p) => ({ id: p.productId, q: p.quantity })),
         ),
@@ -125,9 +150,8 @@ export class OrderService extends BaseService<any, any, any> {
    * Save Order to Database
    */
   private async saveOrder(session: any) {
-    const customerEmail = session.metadata.customerEmail;
-    const customerPhone = session.metadata.customerPhone;
-    const products = JSON.parse(session.metadata.products);
+    const { customerEmail, customerPhone, shippingCountry, deliveryCharge, subtotal, products: productsJson } = session.metadata;
+    const products = JSON.parse(productsJson);
     const stripeSessionId = session.id;
     const totalAmount = session.amount_total / 100; // Convert back from cents
 
@@ -141,9 +165,12 @@ export class OrderService extends BaseService<any, any, any> {
     await this.prisma.$transaction(async (tx) => {
       const order = await (tx as any).order.create({
         data: {
+          subtotal: Number(subtotal),
+          deliveryCharge: Number(deliveryCharge),
           totalAmount,
           customerEmail,
           customerPhone,
+          shippingCountry,
           stripeSessionId,
           paymentStatus: "paid",
           items: {

@@ -164,9 +164,12 @@ model Product {
 
 model Order {
   id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subtotal        Decimal     @db.Decimal(10, 2)
+  deliveryCharge  Decimal     @db.Decimal(10, 2)
   totalAmount     Decimal     @db.Decimal(10, 2)
   customerEmail   String
   customerPhone   String
+  shippingCountry String
   stripeSessionId String      @unique
   paymentStatus   String      // e.g., "paid", "unpaid"
   items           OrderItem[]

@@ -9,6 +9,7 @@ export const CheckoutSchema = v.object({
     ),
     customerEmail: v.pipe(v.string(), v.email()),
     customerPhone: v.string(),
+    shippingCountry: v.string(),
 });
 
 export type CheckoutInput = v.InferOutput<typeof CheckoutSchema>;
