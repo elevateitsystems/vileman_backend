@@ -7,12 +7,16 @@ import { HTTPStatusCode } from "@/types/HTTPStatusCode";
 import { CheckoutInput } from "./order.validation";
 import { AppLogger } from "@/core/logging/logger";
 import { CountryService } from "@/services/country.service";
+import { NodemailerEmailService } from "@/services/NodemailerEmailService";
 
 export class OrderService extends BaseService<any, any, any> {
+  private emailService: NodemailerEmailService;
+
   constructor(prisma: PrismaClient) {
     super(prisma, "Order", {
       enableAuditFields: true,
     });
+    this.emailService = new NodemailerEmailService();
   }
 
   protected getModel() {
@@ -163,8 +167,11 @@ export class OrderService extends BaseService<any, any, any> {
     });
 
     await this.prisma.$transaction(async (tx) => {
+      const orderNumber = this.generateOrderNumber();
+
       const order = await (tx as any).order.create({
         data: {
+          orderNumber,
           subtotal: Number(subtotal),
           deliveryCharge: Number(deliveryCharge),
           totalAmount,
@@ -198,8 +205,55 @@ export class OrderService extends BaseService<any, any, any> {
       }
 
       AppLogger.info(
-        `Order ${order.id} saved successfully for session ${stripeSessionId}`,
+        `Order ${order.id} saved successfully with number ${orderNumber}`,
       );
+
+      // Send Email Notification
+      await this.sendOrderConfirmationEmail(order, products, dbProducts);
+    });
+  }
+
+  /**
+   * Generate Unique Order Number
+   */
+  private generateOrderNumber(): string {
+    const date = new Date();
+    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `ORD-${dateStr}-${random}`;
+  }
+
+  /**
+   * Send Order Confirmation Email
+   */
+  private async sendOrderConfirmationEmail(order: any, products: any[], dbProducts: any[]) {
+    const itemsHtml = products.map((p: any) => {
+      const product = dbProducts.find((dbP: any) => dbP.id === p.id);
+      const price = product.discountPrice || product.price;
+      return `
+        <tr>
+          <td class="product-name">${product.name}</td>
+          <td style="padding: 15px 10px;">${p.q}</td>
+          <td style="text-align: right; padding: 15px 0;">€${Number(price).toFixed(2)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    await this.emailService.sendTemplatedEmail("order-confirmation", {
+      to: order.customerEmail,
+      subject: `Order Confirmation - ${order.orderNumber}`,
+      templateData: {
+        orderNumber: order.orderNumber,
+        date: new Date(order.createdAt).toLocaleDateString(),
+        customerEmail: order.customerEmail,
+        customerPhone: order.customerPhone,
+        shippingCountry: order.shippingCountry,
+        itemsHtml,
+        subtotal: Number(order.subtotal).toFixed(2),
+        deliveryCharge: Number(order.deliveryCharge).toFixed(2),
+        totalAmount: Number(order.totalAmount).toFixed(2),
+        clientUrl: config.server.clientUrl,
+      },
     });
   }
 

@@ -164,6 +164,7 @@ model Product {
 
 model Order {
   id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderNumber     String      @unique
   subtotal        Decimal     @db.Decimal(10, 2)
   deliveryCharge  Decimal     @db.Decimal(10, 2)
   totalAmount     Decimal     @db.Decimal(10, 2)
