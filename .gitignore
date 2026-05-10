@@ -45,3 +45,17 @@ generated
 
 generated/
 generated/**
+
+# logs
+logs/
+*.log
+
+# audio files
+*.mp3
+*.wav
+*.ogg
+*.m4a
+*.aac
+
+# uploads (optional if you don't want to push them)
+uploads/
