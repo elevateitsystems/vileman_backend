@@ -8,6 +8,7 @@ import { SubCategoryModule } from "./modules/SubCategory/SubCategoryModule";
 import { BrandModule } from "./modules/Brand/BrandModule";
 import { ProductModule } from "./modules/Product/ProductModule";
 import { OrderModule } from "./modules/Order/OrderModule";
+import { UserModule } from "./modules/User/UserModule";
 // Main application bootstrap function
 async function bootstrap() {
   try {
@@ -25,6 +26,7 @@ async function bootstrap() {
     app.registerModule(new BrandModule());
     app.registerModule(new ProductModule());
     app.registerModule(new OrderModule());
+    app.registerModule(new UserModule());
     AppLogger.info("✔ All modules registered successfully");
 
     // Start the server
