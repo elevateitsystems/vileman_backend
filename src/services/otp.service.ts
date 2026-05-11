@@ -86,40 +86,99 @@ export class OTPService {
   /**
    * Generate and send OTP with enhanced spam prevention
    */
+  // async sendOTP(data: SendOTPInput): Promise<OTPResult> {
+  //   const { identifier, type, userId } = data;
+
+  //   const email = this.getEmailFromIdentifier(identifier);
+
+  //   // Check rate limiting (hourly limit)
+  //   await this.checkRateLimit(email, type);
+
+  //   // Check if there's a recent OTP that hasn't expired (prevent spam)
+  //   await this.checkRecentOTP(email, type);
+
+  //   // Clean up any existing OTPs for this identifier and type
+  //   await this.cleanupExistingOTPs(email, type);
+
+  //   // Generate OTP code
+  //   const code = this.generateOTPCode();
+  //   const expiresAt = new Date(
+  //     Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000,
+  //   );
+
+  //   // Save OTP to database
+  //   const otpRecord = await this.prisma.oTP.create({
+  //     data: {
+  //       identifier: email,
+  //       code: code,
+  //       type: type,
+  //       expiresAt: expiresAt,
+  //       verified: false,
+  //       attempts: 0,
+  //       userId: userId,
+  //     },
+  //   });
+
+  //   // Send OTP via email
+  //   try {
+  //     await this.sendOTPEmail(email, code, type, expiresAt);
+
+  //     AppLogger.info("OTP sent successfully", {
+  //       identifier: this.maskEmail(email),
+  //       type,
+  //       userId,
+  //       expiresAt,
+  //     });
+
+  //     return {
+  //       success: true,
+  //       message: "OTP sent successfully to your email",
+  //       expiresAt,
+  //       attemptsRemaining: this.MAX_ATTEMPTS,
+  //     };
+  //   } catch (error) {
+  //     // If email sending fails, delete the OTP record
+  //     await this.prisma.oTP.delete({
+  //       where: { id: otpRecord.id },
+  //     });
+
+  //     AppLogger.error("Failed to send OTP email", {
+  //       error: error instanceof Error ? error.message : "Unknown error",
+  //       identifier: this.maskEmail(email),
+  //       type,
+  //     });
+  //     throw new BadRequestError("Failed to send OTP. Please try again.");
+  //   }
+  // }
   async sendOTP(data: SendOTPInput): Promise<OTPResult> {
     const { identifier, type, userId } = data;
 
     const email = this.getEmailFromIdentifier(identifier);
 
-    // Check rate limiting (hourly limit)
-    await this.checkRateLimit(email, type);
+    await Promise.all([
+      this.checkRateLimit(email, type),
+      this.checkRecentOTP(email, type),
+    ]);
 
-    // Check if there's a recent OTP that hasn't expired (prevent spam)
-    await this.checkRecentOTP(email, type);
-
-    // Clean up any existing OTPs for this identifier and type
     await this.cleanupExistingOTPs(email, type);
 
-    // Generate OTP code
     const code = this.generateOTPCode();
     const expiresAt = new Date(
       Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000,
     );
 
-    // Save OTP to database
     const otpRecord = await this.prisma.oTP.create({
       data: {
         identifier: email,
-        code: code,
-        type: type,
-        expiresAt: expiresAt,
+        code,
+        type,
+        expiresAt,
         verified: false,
         attempts: 0,
-        userId: userId,
+        userId,
       },
     });
 
-    // Send OTP via email
     try {
       await this.sendOTPEmail(email, code, type, expiresAt);
 
@@ -137,7 +196,6 @@ export class OTPService {
         attemptsRemaining: this.MAX_ATTEMPTS,
       };
     } catch (error) {
-      // If email sending fails, delete the OTP record
       await this.prisma.oTP.delete({
         where: { id: otpRecord.id },
       });
@@ -147,10 +205,10 @@ export class OTPService {
         identifier: this.maskEmail(email),
         type,
       });
+
       throw new BadRequestError("Failed to send OTP. Please try again.");
     }
   }
-
   /**
    * Verify OTP code and delete after successful verification
    */
