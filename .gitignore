@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # dependencies (bun install)
 node_modules
 
@@ -45,3 +46,66 @@ generated
 
 generated/
 generated/**
+
+# logs
+logs/
+*.log
+
+# audio files
+*.mp3
+*.wav
+*.ogg
+*.m4a
+*.aac
+
+# uploads (optional if you don't want to push them)
+uploads/
+=======
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+.env.production
+.env.development
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# dev database files
+
+generated
+
+
+# Keep the generated Prisma Client + query engine out of version control
+/src/generated/prisma
+
+generated/
+generated/**
+>>>>>>> 1f6047fb1edd1f741152d145d1f327007e4d7806
