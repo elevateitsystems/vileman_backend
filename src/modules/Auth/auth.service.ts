@@ -66,6 +66,96 @@ export class AuthService extends BaseService<User> {
    * Register a new user
    */
 
+  // async register(
+  //   data: RegisterInput,
+  //   avatarFile?: Express.Multer.File,
+  // ): Promise<{ message: string; requiresVerification: boolean }> {
+  //   const {
+  //     email,
+  //     password,
+  //     firstName,
+  //     lastName,
+  //     username,
+  //     address,
+  //     phoneNumber,
+  //   } = data;
+
+  //   // ✅ Check existing user
+  //   const existingUser = await this.prisma.user.findFirst({
+  //     where: {
+  //       OR: [{ email }, ...(username ? [{ username }] : [])],
+  //     },
+  //   });
+
+  //   if (existingUser) {
+  //     const conflictField = existingUser.email === email ? "email" : "username";
+  //     throw new ConflictError(`User with this ${conflictField} already exists`);
+  //   }
+
+  //   // ✅ Hash password
+  //   const hashedPassword = await this.hashPassword(password);
+
+  //   // ✅ Upload image (optional)
+  //   let imageData: any = undefined;
+
+  //   if (avatarFile) {
+  //     const uploaded = await uploadToLocal(
+  //       `${firstName}_${lastName}`,
+  //       avatarFile.path,
+  //       "avatars",
+  //     );
+  //     console.log({ uploaded });
+  //     imageData = {
+  //       create: {
+  //         url: uploaded.url,
+  //         publicId: uploaded.publicId,
+  //         type: "user",
+  //       },
+  //     };
+  //   }
+
+  //   // ✅ Create user WITH relation
+  //   const user = await this.create({
+  //     email,
+  //     username,
+  //     password: hashedPassword,
+  //     firstName,
+  //     lastName,
+  //     displayName: `${firstName} ${lastName}`,
+  //     address,
+  //     phoneNumber,
+
+  //     // 🔥 Relation here
+  //     avatar: imageData,
+  //   });
+
+  //   // ✅ Send OTP
+  //   try {
+  //     await this.otpService.sendOTP({
+  //       identifier: email,
+  //       type: OTPType.email_verification, // 🔥 FIXED (was wrong before)
+  //       userId: user.id,
+  //     });
+
+  //     AppLogger.info("Registration OTP sent", {
+  //       userId: user.id,
+  //       email: user.email,
+  //     });
+  //   } catch (error) {
+  //     AppLogger.error("Failed to send registration OTP", {
+  //       userId: user.id,
+  //       email: user.email,
+  //       error: error instanceof Error ? error.message : "Unknown error",
+  //     });
+  //   }
+
+  //   return {
+  //     message:
+  //       "If an account with this email exists, you will receive a verification code.",
+  //     requiresVerification: true,
+  //   };
+  // }
+
   async register(
     data: RegisterInput,
     avatarFile?: Express.Multer.File,
@@ -80,10 +170,14 @@ export class AuthService extends BaseService<User> {
       phoneNumber,
     } = data;
 
-    // ✅ Check existing user
     const existingUser = await this.prisma.user.findFirst({
       where: {
         OR: [{ email }, ...(username ? [{ username }] : [])],
+      },
+      select: {
+        id: true,
+        email: true,
+        username: true,
       },
     });
 
@@ -92,19 +186,17 @@ export class AuthService extends BaseService<User> {
       throw new ConflictError(`User with this ${conflictField} already exists`);
     }
 
-    // ✅ Hash password
     const hashedPassword = await this.hashPassword(password);
 
-    // ✅ Upload image (optional)
-    let imageData: any = undefined;
+    let imageData;
 
-    if (avatarFile) {
+    if (avatarFile?.path) {
       const uploaded = await uploadToLocal(
         `${firstName}_${lastName}`,
         avatarFile.path,
         "avatars",
       );
-      console.log({ uploaded });
+
       imageData = {
         create: {
           url: uploaded.url,
@@ -114,7 +206,6 @@ export class AuthService extends BaseService<User> {
       };
     }
 
-    // ✅ Create user WITH relation
     const user = await this.create({
       email,
       username,
@@ -124,34 +215,33 @@ export class AuthService extends BaseService<User> {
       displayName: `${firstName} ${lastName}`,
       address,
       phoneNumber,
-
-      // 🔥 Relation here
       avatar: imageData,
     });
 
-    // ✅ Send OTP
-    try {
-      await this.otpService.sendOTP({
+    // background OTP send (non-blocking)
+    void this.otpService
+      .sendOTP({
         identifier: email,
-        type: OTPType.email_verification, // 🔥 FIXED (was wrong before)
+        type: OTPType.email_verification,
         userId: user.id,
+      })
+      .then(() => {
+        AppLogger.info("Registration OTP sent", {
+          userId: user.id,
+          email: user.email,
+        });
+      })
+      .catch((error) => {
+        AppLogger.error("Failed to send registration OTP", {
+          userId: user.id,
+          email: user.email,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
       });
-
-      AppLogger.info("Registration OTP sent", {
-        userId: user.id,
-        email: user.email,
-      });
-    } catch (error) {
-      AppLogger.error("Failed to send registration OTP", {
-        userId: user.id,
-        email: user.email,
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
 
     return {
       message:
-        "If an account with this email exists, you will receive a verification code.",
+        "Registration successful. Verification code will be sent to your email.",
       requiresVerification: true,
     };
   }
