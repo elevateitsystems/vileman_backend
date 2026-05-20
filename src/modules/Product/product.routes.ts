@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { ProductController } from "./product.controller";
-import { ProductValidation } from "./product.validation";
+import { ProductValidation, ProductCustomizationValidation } from "./product.validation";
 import { validateRequest } from "@/middleware/validation";
 import { asyncHandler } from "@/middleware/asyncHandler";
 import { upload } from "@/utils/multer";
@@ -30,6 +30,19 @@ export class ProductRoutes {
     const listValidator = validateRequest({
       query: ProductValidation.query.list,
     });
+    
+    const createOptionValidator = validateRequest({
+      body: ProductCustomizationValidation.createOption,
+    });
+    const updateOptionValidator = validateRequest({
+      body: ProductCustomizationValidation.updateOption,
+    });
+    const createChoiceValidator = validateRequest({
+      body: ProductCustomizationValidation.createChoice,
+    });
+    const updateChoiceValidator = validateRequest({
+      body: ProductCustomizationValidation.updateChoice,
+    });
 
     // Define Routes
     this.router.post(
@@ -48,9 +61,61 @@ export class ProductRoutes {
     );
 
     this.router.get(
+      "/:slug/customization",
+      asyncHandler((req, res) => this.controller.getCustomizationConfig(req, res)),
+    );
+
+    this.router.get(
       "/:id",
       idValidator,
       asyncHandler((req, res) => this.controller.getOne(req, res)),
+    );
+
+    // Customization Management Routes (Admin)
+    this.router.post(
+      "/:productId/customization-options",
+      authenticate,
+      authorize("admin"),
+      createOptionValidator,
+      asyncHandler((req, res) => this.controller.addCustomizationOption(req, res)),
+    );
+
+    this.router.patch(
+      "/customization-options/:optionId",
+      authenticate,
+      authorize("admin"),
+      updateOptionValidator,
+      asyncHandler((req, res) => this.controller.updateCustomizationOption(req, res)),
+    );
+
+    this.router.delete(
+      "/customization-options/:optionId",
+      authenticate,
+      authorize("admin"),
+      asyncHandler((req, res) => this.controller.deleteCustomizationOption(req, res)),
+    );
+
+    this.router.post(
+      "/customization-options/:optionId/choices",
+      authenticate,
+      authorize("admin"),
+      createChoiceValidator,
+      asyncHandler((req, res) => this.controller.addCustomizationChoice(req, res)),
+    );
+
+    this.router.patch(
+      "/customization-choices/:choiceId",
+      authenticate,
+      authorize("admin"),
+      updateChoiceValidator,
+      asyncHandler((req, res) => this.controller.updateCustomizationChoice(req, res)),
+    );
+
+    this.router.delete(
+      "/customization-choices/:choiceId",
+      authenticate,
+      authorize("admin"),
+      asyncHandler((req, res) => this.controller.deleteCustomizationChoice(req, res)),
     );
 
     this.router.patch(

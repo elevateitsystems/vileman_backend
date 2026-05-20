@@ -170,4 +170,81 @@ export class ProductController extends BaseController {
       HTTPStatusCode.OK,
     );
   };
+
+  // =========================================================================
+  // Customization Endpoints
+  // =========================================================================
+
+  public getCustomizationConfig = async (req: Request, res: Response) => {
+    const { slug } = req.params;
+    this.logAction("getCustomizationConfig", req, { slug });
+
+    try {
+      const result = await this.service.getCustomizationConfig(slug);
+      return this.sendResponse(
+        res,
+        "Customization config retrieved successfully",
+        HTTPStatusCode.OK,
+        result
+      );
+    } catch (error: any) {
+      return this.sendResponse(
+        res,
+        error.message,
+        HTTPStatusCode.NOT_FOUND
+      );
+    }
+  };
+
+  public addCustomizationOption = async (req: Request, res: Response) => {
+    const { productId } = req.params;
+    const body = req.validatedBody;
+    this.logAction("addCustomizationOption", req, { productId, body });
+
+    const result = await this.service.addCustomizationOption(productId, body);
+    return this.sendCreatedResponse(res, result, "Customization option added successfully");
+  };
+
+  public updateCustomizationOption = async (req: Request, res: Response) => {
+    const { optionId } = req.params;
+    const body = req.validatedBody;
+    this.logAction("updateCustomizationOption", req, { optionId, body });
+
+    const result = await this.service.updateCustomizationOption(optionId, body);
+    return this.sendResponse(res, "Customization option updated successfully", HTTPStatusCode.OK, result);
+  };
+
+  public deleteCustomizationOption = async (req: Request, res: Response) => {
+    const { optionId } = req.params;
+    this.logAction("deleteCustomizationOption", req, { optionId });
+
+    await this.service.deleteCustomizationOption(optionId);
+    return this.sendResponse(res, "Customization option deleted successfully", HTTPStatusCode.OK);
+  };
+
+  public addCustomizationChoice = async (req: Request, res: Response) => {
+    const { optionId } = req.params;
+    const body = req.validatedBody;
+    this.logAction("addCustomizationChoice", req, { optionId, body });
+
+    const result = await this.service.addCustomizationChoice(optionId, body);
+    return this.sendCreatedResponse(res, result, "Customization choice added successfully");
+  };
+
+  public updateCustomizationChoice = async (req: Request, res: Response) => {
+    const { choiceId } = req.params;
+    const body = req.validatedBody;
+    this.logAction("updateCustomizationChoice", req, { choiceId, body });
+
+    const result = await this.service.updateCustomizationChoice(choiceId, body);
+    return this.sendResponse(res, "Customization choice updated successfully", HTTPStatusCode.OK, result);
+  };
+
+  public deleteCustomizationChoice = async (req: Request, res: Response) => {
+    const { choiceId } = req.params;
+    this.logAction("deleteCustomizationChoice", req, { choiceId });
+
+    await this.service.deleteCustomizationChoice(choiceId);
+    return this.sendResponse(res, "Customization choice deleted successfully", HTTPStatusCode.OK);
+  };
 }

@@ -65,6 +65,7 @@ export class ProductService extends BaseService<
         // colors,
         slug,
         stock: data.quantity,
+        isCustomizable: data.isCustomizable ?? false,
         createdById: userId,
         images: imagesData,
       },
@@ -262,5 +263,73 @@ export class ProductService extends BaseService<
    */
   public async exists(filters: any) {
     return super.exists(filters);
+  }
+
+  // =========================================================================
+  // Customization Methods
+  // =========================================================================
+
+  public async getCustomizationConfig(slug: string) {
+    const product = await this.getModel().findUnique({
+      where: { slug, isDeleted: false },
+      include: {
+        customizationOptions: {
+          include: {
+            choices: true,
+          },
+        },
+      },
+    });
+
+    if (!product) throw new Error("Product not found");
+
+    return {
+      isCustomizable: product.isCustomizable,
+      options: product.customizationOptions,
+    };
+  }
+
+  public async addCustomizationOption(productId: string, data: { name: string, type: string, required: boolean }) {
+    return (this.prisma as any).productCustomizationOption.create({
+      data: {
+        productId,
+        ...data,
+      },
+    });
+  }
+
+  public async updateCustomizationOption(optionId: string, data: any) {
+    return (this.prisma as any).productCustomizationOption.update({
+      where: { id: optionId },
+      data,
+    });
+  }
+
+  public async deleteCustomizationOption(optionId: string) {
+    return (this.prisma as any).productCustomizationOption.delete({
+      where: { id: optionId },
+    });
+  }
+
+  public async addCustomizationChoice(optionId: string, data: { value: string }) {
+    return (this.prisma as any).productCustomizationChoice.create({
+      data: {
+        optionId,
+        ...data,
+      },
+    });
+  }
+
+  public async updateCustomizationChoice(choiceId: string, data: any) {
+    return (this.prisma as any).productCustomizationChoice.update({
+      where: { id: choiceId },
+      data,
+    });
+  }
+
+  public async deleteCustomizationChoice(choiceId: string) {
+    return (this.prisma as any).productCustomizationChoice.delete({
+      where: { id: choiceId },
+    });
   }
 }

@@ -8,6 +8,7 @@ import { CheckoutInput } from "./order.validation";
 import { AppLogger } from "@/core/logging/logger";
 import { CountryService } from "@/services/country.service";
 import { NodemailerEmailService } from "@/services/NodemailerEmailService";
+import { uploadToLocal } from "@/utils/localUpload";
 
 export class OrderService extends BaseService<any, any, any> {
   private emailService: NodemailerEmailService;
@@ -26,7 +27,7 @@ export class OrderService extends BaseService<any, any, any> {
   /**
    * Create Stripe Checkout Session
    */
-  public async createCheckoutSession(data: CheckoutInput) {
+  public async createCheckoutSession(data: CheckoutInput, imageFiles?: Express.Multer.File[]) {
     const { products, customerEmail, customerPhone, shippingCountry } = data;
 
     // 1. Fetch products and validate prices
@@ -36,6 +37,9 @@ export class OrderService extends BaseService<any, any, any> {
         id: { in: productIds },
         isDeleted: false,
       },
+      include: {
+        customizationOptions: true
+      }
     });
 
     if (dbProducts.length !== products.length) {
@@ -50,7 +54,7 @@ export class OrderService extends BaseService<any, any, any> {
     const deliveryCharge = await CountryService.getDeliveryCharge(shippingCountry);
     let subtotal = 0;
 
-    // 3. Prepare line items
+    // 3. Prepare line items and validate customizations
     const lineItems = products.map((item) => {
       const product = dbProducts.find((p: any) => p.id === item.productId);
       if (!product) {
@@ -59,6 +63,29 @@ export class OrderService extends BaseService<any, any, any> {
           `Product ${item.productId} not found`,
           "PRODUCT_NOT_FOUND",
         );
+      }
+
+      // Customization validation
+      if (item.customization && !product.isCustomizable) {
+        throw new AppError(
+          HTTPStatusCode.BAD_REQUEST,
+          `Product ${product.name} is not customizable`,
+          "CUSTOMIZATION_ERROR"
+        );
+      }
+
+      if (product.isCustomizable && product.customizationOptions) {
+        const requiredOptions = product.customizationOptions.filter((opt: any) => opt.required);
+        const selections = item.customization?.selections || {};
+        for (const reqOpt of requiredOptions) {
+          if (!selections[reqOpt.name]) {
+            throw new AppError(
+              HTTPStatusCode.BAD_REQUEST,
+              `Customization option '${reqOpt.name}' is required for ${product.name}`,
+              "CUSTOMIZATION_ERROR"
+            );
+          }
+        }
       }
 
       // Calculate price (discountPrice if available, else price)
@@ -97,7 +124,56 @@ export class OrderService extends BaseService<any, any, any> {
       quantity: 1,
     });
 
-    // 5. Create Stripe Session
+    // 4. Upload images if any
+    let uploadedImagesInfo: { url: string; publicId: string }[] = [];
+    if (imageFiles && imageFiles.length > 0) {
+      uploadedImagesInfo = await Promise.all(
+        imageFiles.map((file, index) =>
+          uploadToLocal(`order-customization-${Date.now()}-${index}`, file.path, "orders"),
+        ),
+      );
+    }
+
+    // 5. Create Order in DB (unpaid)
+    const orderNumber = this.generateOrderNumber();
+    const order = await (this.prisma as any).order.create({
+      data: {
+        orderNumber,
+        subtotal: Number(subtotal),
+        deliveryCharge: Number(deliveryCharge),
+        totalAmount: Number(subtotal) + Number(deliveryCharge),
+        customerEmail,
+        customerPhone,
+        shippingCountry,
+        stripeSessionId: "pending_" + Date.now(), // Temporary ID
+        paymentStatus: "unpaid",
+        items: {
+          create: products.map((item) => {
+            const product = dbProducts.find((p: any) => p.id === item.productId);
+            const unitPrice = product.discountPrice || product.price;
+            
+            const createItem: any = {
+              productId: item.productId,
+              quantity: item.quantity,
+              price: unitPrice,
+            };
+
+            if (item.customization) {
+              createItem.customization = {
+                create: {
+                  uploadedImages: uploadedImagesInfo.length > 0 ? uploadedImagesInfo : undefined,
+                  comment: item.customization.comment,
+                  customizationSelections: item.customization.selections || {},
+                }
+              };
+            }
+            return createItem;
+          }),
+        },
+      }
+    });
+
+    // 6. Create Stripe Session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "payment",
@@ -106,16 +182,14 @@ export class OrderService extends BaseService<any, any, any> {
       success_url: `${config.server.clientUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${config.server.clientUrl}/cancel`,
       metadata: {
-        customerEmail,
-        customerPhone,
-        shippingCountry,
-        deliveryCharge: deliveryCharge.toString(),
-        subtotal: subtotal.toString(),
-        // Store product info in metadata as stringified JSON
-        products: JSON.stringify(
-          products.map((p) => ({ id: p.productId, q: p.quantity })),
-        ),
+        orderId: order.id,
       },
+    });
+
+    // Update order with actual Stripe session ID
+    await (this.prisma as any).order.update({
+      where: { id: order.id },
+      data: { stripeSessionId: session.id }
     });
 
     return { url: session.url };
@@ -144,72 +218,64 @@ export class OrderService extends BaseService<any, any, any> {
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as any;
-      await this.saveOrder(session);
+      await this.completeOrder(session);
     }
 
     return { received: true };
   }
 
   /**
-   * Save Order to Database
+   * Complete Order after successful payment
    */
-  private async saveOrder(session: any) {
-    const { customerEmail, customerPhone, shippingCountry, deliveryCharge, subtotal, products: productsJson } = session.metadata;
-    const products = JSON.parse(productsJson);
-    const stripeSessionId = session.id;
-    const totalAmount = session.amount_total / 100; // Convert back from cents
+  private async completeOrder(session: any) {
+    const { orderId } = session.metadata;
 
-    // Get product details to store prices at time of order
-    const dbProducts = await (this.prisma as any).product.findMany({
-      where: {
-        id: { in: products.map((p: any) => p.id) },
-      },
+    if (!orderId) {
+      AppLogger.error(`Webhook session ${session.id} is missing orderId in metadata`);
+      return;
+    }
+
+    const order = await (this.prisma as any).order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: {
+          include: { product: true }
+        }
+      }
     });
 
-    await this.prisma.$transaction(async (tx) => {
-      const orderNumber = this.generateOrderNumber();
+    if (!order) {
+      AppLogger.error(`Order ${orderId} not found for webhook session ${session.id}`);
+      return;
+    }
 
-      const order = await (tx as any).order.create({
+    if (order.paymentStatus === "paid") {
+      return; // Already processed
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Update order status
+      await (tx as any).order.update({
+        where: { id: orderId },
         data: {
-          orderNumber,
-          subtotal: Number(subtotal),
-          deliveryCharge: Number(deliveryCharge),
-          totalAmount,
-          customerEmail,
-          customerPhone,
-          shippingCountry,
-          stripeSessionId,
           paymentStatus: "paid",
-          items: {
-            create: products.map((p: any) => {
-              const product = dbProducts.find((dbP: any) => dbP.id === p.id);
-              const price = product.discountPrice || product.price;
-              return {
-                productId: p.id,
-                quantity: p.q,
-                price: price,
-              };
-            }),
-          },
         },
       });
 
-      // Optionally decrease stock here
-      for (const p of products) {
+      // Decrease stock
+      for (const item of order.items) {
         await (tx as any).product.update({
-          where: { id: p.id },
+          where: { id: item.productId },
           data: {
-            stock: { decrement: p.q },
+            stock: { decrement: item.quantity },
           },
         });
       }
 
-      AppLogger.info(
-        `Order ${order.id} saved successfully with number ${orderNumber}`,
-      );
+      AppLogger.info(`Order ${order.id} marked as paid`);
 
       // Send Email Notification
-      await this.sendOrderConfirmationEmail(order, products, dbProducts);
+      await this.sendOrderConfirmationEmail(order, order.items);
     });
   }
 
@@ -226,14 +292,14 @@ export class OrderService extends BaseService<any, any, any> {
   /**
    * Send Order Confirmation Email
    */
-  private async sendOrderConfirmationEmail(order: any, products: any[], dbProducts: any[]) {
-    const itemsHtml = products.map((p: any) => {
-      const product = dbProducts.find((dbP: any) => dbP.id === p.id);
-      const price = product.discountPrice || product.price;
+  private async sendOrderConfirmationEmail(order: any, items: any[]) {
+    const itemsHtml = items.map((item: any) => {
+      const product = item.product;
+      const price = item.price;
       return `
         <tr>
           <td class="product-name">${product.name}</td>
-          <td style="padding: 15px 10px;">${p.q}</td>
+          <td style="padding: 15px 10px;">${item.quantity}</td>
           <td style="text-align: right; padding: 15px 0;">€${Number(price).toFixed(2)}</td>
         </tr>
       `;

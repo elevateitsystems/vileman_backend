@@ -4,8 +4,7 @@ import { OrderService } from "./order.service";
 import { CheckoutSchema } from "./order.validation";
 import { asyncHandler } from "@/middleware/asyncHandler";
 import { HTTPStatusCode } from "@/types/HTTPStatusCode";
-import * as v from "valibot";
-
+import { AppError } from "@/core/errors/AppError";
 export class OrderController extends BaseController {
   constructor(private orderService: OrderService) {
     super();
@@ -15,8 +14,17 @@ export class OrderController extends BaseController {
    * Create Checkout Session
    */
   public checkout = asyncHandler(async (req: Request, res: Response) => {
-    const data = v.parse(CheckoutSchema, req.body);
-    const result = await this.orderService.createCheckoutSession(data);
+    let payload = req.body;
+    if (req.body.data) {
+      try {
+        payload = JSON.parse(req.body.data);
+      } catch (e) {
+        throw new AppError(HTTPStatusCode.BAD_REQUEST, "Invalid JSON data", "INVALID_DATA");
+      }
+    }
+    
+    const data = CheckoutSchema.parse(payload);
+    const result = await this.orderService.createCheckoutSession(data, req.files as Express.Multer.File[]);
     this.sendResponse(res, "Checkout session created", HTTPStatusCode.OK, result);
   });
 

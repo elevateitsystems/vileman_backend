@@ -156,10 +156,38 @@ model Product {
   createdBy   User   @relation(fields: [createdById], references: [id])
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
-  isDeleted     Boolean       @default(false)
-  deletedAt     DateTime?
+  isDeleted            Boolean                      @default(false)
+  deletedAt            DateTime?
+  isCustomizable       Boolean                      @default(false)
+  customizationOptions ProductCustomizationOption[]
+  
   @@index([categoryId])
   @@index([subCategoryId])
+}
+
+model ProductCustomizationOption {
+  id        String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId String                       @db.Uuid
+  product   Product                      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String                       
+  type      String                       
+  required  Boolean                      @default(false)
+  choices   ProductCustomizationChoice[]
+  createdAt DateTime                     @default(now())
+  updatedAt DateTime                     @updatedAt
+
+  @@index([productId])
+}
+
+model ProductCustomizationChoice {
+  id        String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  optionId  String                     @db.Uuid
+  option    ProductCustomizationOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  value     String                     
+  createdAt DateTime                   @default(now())
+  updatedAt DateTime                   @updatedAt
+
+  @@index([optionId])
 }
 
 model Order {
@@ -186,6 +214,18 @@ model OrderItem {
   product   Product @relation(fields: [productId], references: [id])
   quantity  Int
   price     Decimal @db.Decimal(10, 2)
+  customization OrderItemCustomization?
+}
+
+model OrderItemCustomization {
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderItemId             String    @unique @db.Uuid
+  orderItem               OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  uploadedImages          Json?
+  comment                 String?
+  customizationSelections Json      
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 }
 
 

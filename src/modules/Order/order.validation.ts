@@ -1,15 +1,21 @@
-import * as v from 'valibot';
+import { z } from "zod";
 
-export const CheckoutSchema = v.object({
-    products: v.array(
-        v.object({
-            productId: v.pipe(v.string(), v.uuid()),
-            quantity: v.pipe(v.number(), v.minValue(1)),
-        })
-    ),
-    customerEmail: v.pipe(v.string(), v.email()),
-    customerPhone: v.string(),
-    shippingCountry: v.string(),
+export const CustomizationSchema = z.object({
+  selections: z.record(z.string(), z.string()).optional(),
+  comment: z.string().optional()
 });
 
-export type CheckoutInput = v.InferOutput<typeof CheckoutSchema>;
+export const CheckoutSchema = z.object({
+    products: z.array(
+        z.object({
+            productId: z.string().uuid(),
+            quantity: z.number().int().min(1),
+            customization: CustomizationSchema.optional(),
+        })
+    ).min(1),
+    customerEmail: z.string().email(),
+    customerPhone: z.string(),
+    shippingCountry: z.string(),
+});
+
+export type CheckoutInput = z.infer<typeof CheckoutSchema>;

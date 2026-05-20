@@ -75,6 +75,11 @@ export const ProductValidation = {
       createdById: z.string().uuid("Invalid user ID").optional(),
 
       images: z.array(ProductImageSchema).optional(),
+
+      isCustomizable: z.preprocess(
+        (val) => val === "true" || val === true,
+        z.boolean().optional().default(false)
+      ),
     })
     .strict()
     .transform((data) => {
@@ -152,6 +157,11 @@ export const ProductValidation = {
       images: z.array(ProductImageSchema).optional(),
 
       isDeleted: z.boolean().optional(),
+
+      isCustomizable: z.preprocess(
+        (val) => val === "true" || val === true,
+        z.boolean().optional()
+      ),
     })
     .strict()
     .transform((data) => {
@@ -242,6 +252,25 @@ export const ProductValidation = {
   },
 };
 
+export const ProductCustomizationValidation = {
+  createOption: z.object({
+    name: z.string().trim().min(1, "Option name is required"),
+    type: z.enum(["select", "text"]),
+    required: z.boolean().default(false),
+  }),
+  createChoice: z.object({
+    value: z.string().trim().min(1, "Choice value is required"),
+  }),
+  updateOption: z.object({
+    name: z.string().trim().min(1).optional(),
+    type: z.enum(["select", "text"]).optional(),
+    required: z.boolean().optional(),
+  }),
+  updateChoice: z.object({
+    value: z.string().trim().min(1).optional(),
+  })
+};
+
 // Types
 export type CreateProductInput = z.infer<typeof ProductValidation.create>;
 export type UpdateProductInput = z.infer<typeof ProductValidation.update>;
@@ -250,3 +279,8 @@ export type ListProductQueryDto = z.infer<typeof ProductValidation.query.list>;
 export type SearchProductQueryDto = z.infer<
   typeof ProductValidation.query.search
 >;
+
+export type CreateCustomizationOptionInput = z.infer<typeof ProductCustomizationValidation.createOption>;
+export type CreateCustomizationChoiceInput = z.infer<typeof ProductCustomizationValidation.createChoice>;
+export type UpdateCustomizationOptionInput = z.infer<typeof ProductCustomizationValidation.updateOption>;
+export type UpdateCustomizationChoiceInput = z.infer<typeof ProductCustomizationValidation.updateChoice>;
