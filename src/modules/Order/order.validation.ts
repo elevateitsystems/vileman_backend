@@ -2,7 +2,11 @@ import { z } from "zod";
 
 export const CustomizationSchema = z.object({
   selections: z.record(z.string(), z.string()).optional(),
-  comment: z.string().optional()
+  comment: z.string().optional(),
+  images: z.array(z.object({
+    url: z.string(),
+    publicId: z.string().optional()
+  })).optional()
 });
 
 export const CheckoutSchema = z.object({

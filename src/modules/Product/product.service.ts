@@ -121,7 +121,9 @@ export class ProductService extends BaseService<
     if (data.deleteImageIds) {
       if (typeof data.deleteImageIds === "string") {
         try {
-          deleteIds = JSON.parse((data.deleteImageIds as string).replace(/'/g, '"'));
+          deleteIds = JSON.parse(
+            (data.deleteImageIds as string).replace(/'/g, '"'),
+          );
         } catch {
           throw new Error("Invalid deleteImageIds format");
         }
@@ -289,7 +291,10 @@ export class ProductService extends BaseService<
     };
   }
 
-  public async addCustomizationOption(productId: string, data: { name: string, type: string, required: boolean }) {
+  public async addCustomizationOption(
+    productId: string,
+    data: { name: string; type: string; required: boolean },
+  ) {
     return (this.prisma as any).productCustomizationOption.create({
       data: {
         productId,
@@ -311,7 +316,10 @@ export class ProductService extends BaseService<
     });
   }
 
-  public async addCustomizationChoice(optionId: string, data: { value: string }) {
+  public async addCustomizationChoice(
+    optionId: string,
+    data: { value: string },
+  ) {
     return (this.prisma as any).productCustomizationChoice.create({
       data: {
         optionId,

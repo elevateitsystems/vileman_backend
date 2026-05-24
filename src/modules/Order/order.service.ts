@@ -8,7 +8,7 @@ import { CheckoutInput } from "./order.validation";
 import { AppLogger } from "@/core/logging/logger";
 import { CountryService } from "@/services/country.service";
 import { NodemailerEmailService } from "@/services/NodemailerEmailService";
-import { uploadToLocal } from "@/utils/localUpload";
+import { uploadToLocal, deleteLocalFile } from "@/utils/localUpload";
 
 export class OrderService extends BaseService<any, any, any> {
   private emailService: NodemailerEmailService;
@@ -27,7 +27,10 @@ export class OrderService extends BaseService<any, any, any> {
   /**
    * Create Stripe Checkout Session
    */
-  public async createCheckoutSession(data: CheckoutInput, imageFiles?: Express.Multer.File[]) {
+  public async createCheckoutSession(
+    data: CheckoutInput,
+    imageFiles?: Express.Multer.File[],
+  ) {
     const { products, customerEmail, customerPhone, shippingCountry } = data;
 
     // 1. Fetch products and validate prices
@@ -38,10 +41,10 @@ export class OrderService extends BaseService<any, any, any> {
         isDeleted: false,
       },
       include: {
-        customizationOptions: true
-      }
+        customizationOptions: true,
+      },
     });
-
+    console.log(dbProducts.length, products.length);
     if (dbProducts.length !== products.length) {
       throw new AppError(
         HTTPStatusCode.BAD_REQUEST,
@@ -51,7 +54,8 @@ export class OrderService extends BaseService<any, any, any> {
     }
 
     // 2. Calculate Delivery Charge
-    const deliveryCharge = await CountryService.getDeliveryCharge(shippingCountry);
+    const deliveryCharge =
+      await CountryService.getDeliveryCharge(shippingCountry);
     let subtotal = 0;
 
     // 3. Prepare line items and validate customizations
@@ -70,19 +74,21 @@ export class OrderService extends BaseService<any, any, any> {
         throw new AppError(
           HTTPStatusCode.BAD_REQUEST,
           `Product ${product.name} is not customizable`,
-          "CUSTOMIZATION_ERROR"
+          "CUSTOMIZATION_ERROR",
         );
       }
 
       if (product.isCustomizable && product.customizationOptions) {
-        const requiredOptions = product.customizationOptions.filter((opt: any) => opt.required);
+        const requiredOptions = product.customizationOptions.filter(
+          (opt: any) => opt.required,
+        );
         const selections = item.customization?.selections || {};
         for (const reqOpt of requiredOptions) {
           if (!selections[reqOpt.name]) {
             throw new AppError(
               HTTPStatusCode.BAD_REQUEST,
               `Customization option '${reqOpt.name}' is required for ${product.name}`,
-              "CUSTOMIZATION_ERROR"
+              "CUSTOMIZATION_ERROR",
             );
           }
         }
@@ -124,16 +130,6 @@ export class OrderService extends BaseService<any, any, any> {
       quantity: 1,
     });
 
-    // 4. Upload images if any
-    let uploadedImagesInfo: { url: string; publicId: string }[] = [];
-    if (imageFiles && imageFiles.length > 0) {
-      uploadedImagesInfo = await Promise.all(
-        imageFiles.map((file, index) =>
-          uploadToLocal(`order-customization-${Date.now()}-${index}`, file.path, "orders"),
-        ),
-      );
-    }
-
     // 5. Create Order in DB (unpaid)
     const orderNumber = this.generateOrderNumber();
     const order = await (this.prisma as any).order.create({
@@ -149,9 +145,11 @@ export class OrderService extends BaseService<any, any, any> {
         paymentStatus: "unpaid",
         items: {
           create: products.map((item) => {
-            const product = dbProducts.find((p: any) => p.id === item.productId);
+            const product = dbProducts.find(
+              (p: any) => p.id === item.productId,
+            );
             const unitPrice = product.discountPrice || product.price;
-            
+
             const createItem: any = {
               productId: item.productId,
               quantity: item.quantity,
@@ -161,16 +159,16 @@ export class OrderService extends BaseService<any, any, any> {
             if (item.customization) {
               createItem.customization = {
                 create: {
-                  uploadedImages: uploadedImagesInfo.length > 0 ? uploadedImagesInfo : undefined,
                   comment: item.customization.comment,
-                  customizationSelections: item.customization.selections || {},
-                }
+                  selections: item.customization.selections || {},
+                  images: item.customization.images || [],
+                },
               };
             }
             return createItem;
           }),
         },
-      }
+      },
     });
 
     // 6. Create Stripe Session
@@ -189,7 +187,7 @@ export class OrderService extends BaseService<any, any, any> {
     // Update order with actual Stripe session ID
     await (this.prisma as any).order.update({
       where: { id: order.id },
-      data: { stripeSessionId: session.id }
+      data: { stripeSessionId: session.id },
     });
 
     return { url: session.url };
@@ -231,7 +229,9 @@ export class OrderService extends BaseService<any, any, any> {
     const { orderId } = session.metadata;
 
     if (!orderId) {
-      AppLogger.error(`Webhook session ${session.id} is missing orderId in metadata`);
+      AppLogger.error(
+        `Webhook session ${session.id} is missing orderId in metadata`,
+      );
       return;
     }
 
@@ -239,13 +239,15 @@ export class OrderService extends BaseService<any, any, any> {
       where: { id: orderId },
       include: {
         items: {
-          include: { product: true }
-        }
-      }
+          include: { product: true },
+        },
+      },
     });
 
     if (!order) {
-      AppLogger.error(`Order ${orderId} not found for webhook session ${session.id}`);
+      AppLogger.error(
+        `Order ${orderId} not found for webhook session ${session.id}`,
+      );
       return;
     }
 
@@ -284,7 +286,7 @@ export class OrderService extends BaseService<any, any, any> {
    */
   private generateOrderNumber(): string {
     const date = new Date();
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, "");
     const random = Math.random().toString(36).substring(2, 6).toUpperCase();
     return `ORD-${dateStr}-${random}`;
   }
@@ -293,17 +295,19 @@ export class OrderService extends BaseService<any, any, any> {
    * Send Order Confirmation Email
    */
   private async sendOrderConfirmationEmail(order: any, items: any[]) {
-    const itemsHtml = items.map((item: any) => {
-      const product = item.product;
-      const price = item.price;
-      return `
+    const itemsHtml = items
+      .map((item: any) => {
+        const product = item.product;
+        const price = item.price;
+        return `
         <tr>
           <td class="product-name">${product.name}</td>
           <td style="padding: 15px 10px;">${item.quantity}</td>
           <td style="text-align: right; padding: 15px 0;">€${Number(price).toFixed(2)}</td>
         </tr>
       `;
-    }).join('');
+      })
+      .join("");
 
     await this.emailService.sendTemplatedEmail("order-confirmation", {
       to: order.customerEmail,
@@ -327,11 +331,19 @@ export class OrderService extends BaseService<any, any, any> {
    * Get all orders with pagination and filters
    */
   public async getAllOrders(filters: any = {}, pagination?: any) {
-    return this.findMany(filters, pagination, { createdAt: "desc" }, {
-      items: {
-        include: { product: true },
+    return this.findMany(
+      filters,
+      pagination,
+      { createdAt: "desc" },
+      {
+        items: {
+          include: {
+            product: true,
+            customization: true,
+          },
+        },
       },
-    });
+    );
   }
 
   /**
@@ -340,7 +352,10 @@ export class OrderService extends BaseService<any, any, any> {
   public async getOrderById(id: string) {
     const order = await this.findById(id, {
       items: {
-        include: { product: true },
+        include: {
+          product: true,
+          customization: true,
+        },
       },
     });
     if (!order) {
@@ -357,13 +372,83 @@ export class OrderService extends BaseService<any, any, any> {
    * Update order status or details
    */
   public async updateOrder(id: string, data: any) {
-    return this.updateById(id, data);
+    const existingOrder = await (this.prisma as any).order.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: { customization: true },
+        },
+      },
+    });
+
+    const updatedOrder = await this.updateById(id, data);
+
+    if (existingOrder) {
+      const newOrder = await (this.prisma as any).order.findUnique({
+        where: { id },
+        include: {
+          items: {
+            include: { customization: true },
+          },
+        },
+      });
+
+      const oldImages: string[] = [];
+      const newImages: Set<string> = new Set();
+
+      existingOrder.items.forEach((item: any) => {
+        if (item.customization?.images) {
+          item.customization.images.forEach((img: any) => {
+            if (img.publicId) oldImages.push(img.publicId);
+          });
+        }
+      });
+
+      if (newOrder) {
+        newOrder.items.forEach((item: any) => {
+          if (item.customization?.images) {
+            item.customization.images.forEach((img: any) => {
+              if (img.publicId) newImages.add(img.publicId);
+            });
+          }
+        });
+      }
+
+      for (const publicId of oldImages) {
+        if (!newImages.has(publicId)) {
+          await deleteLocalFile(publicId, "orders");
+        }
+      }
+    }
+
+    return updatedOrder;
   }
 
   /**
    * Delete order
    */
   public async deleteOrder(id: string) {
+    const existingOrder = await (this.prisma as any).order.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: { customization: true },
+        },
+      },
+    });
+
+    if (existingOrder) {
+      for (const item of existingOrder.items) {
+        if (item.customization && item.customization.images) {
+          for (const img of item.customization.images) {
+            if (img.publicId) {
+              await deleteLocalFile(img.publicId, "orders");
+            }
+          }
+        }
+      }
+    }
+
     return this.deleteById(id);
   }
 }

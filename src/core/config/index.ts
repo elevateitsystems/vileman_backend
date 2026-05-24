@@ -31,7 +31,7 @@ export const config = {
     requestTimeout: parseInt(process.env.REQUEST_TIMEOUT || "30000"),
     baseUrl:
       process.env.BASE_URL ||
-      `http://192.168.0.166:${process.env.PORT || "3030"}`,
+      `http://192.168.0.218:${process.env.PORT || "3030"}`,
     clientUrl: process.env.CLIENT_URL || "http://localhost:3000",
   },
   database: {

@@ -221,9 +221,9 @@ model OrderItemCustomization {
   id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderItemId             String    @unique @db.Uuid
   orderItem               OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  uploadedImages          Json?
+  images                  Json?
   comment                 String?
-  customizationSelections Json      
+  selections              Json      
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 }
