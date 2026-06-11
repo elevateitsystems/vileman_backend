@@ -33,6 +33,7 @@ export class CategoryRoutes {
     // Define Routes
     this.router.post(
       "/",
+      upload.single("image"),
       authenticate,
       // authorize("admin"),
       createValidator,

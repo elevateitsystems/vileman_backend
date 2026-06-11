@@ -16,7 +16,7 @@ enum UserRole {
 enum ImageType {
   user
   product
-
+  category
 }
 
 enum OTPType {
@@ -45,6 +45,7 @@ model Image {
   brandId      String? @db.Uuid @unique
   user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   product     Product?     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category    Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
 }
 
@@ -100,7 +101,8 @@ model Category {
   name          String
   slug          String        @unique
   description   String?
-
+  imageId       String?       @unique @db.Uuid
+  image         Image?
   subCategory SubCategory[]
   products      Product[]
   createdById   String        @db.Uuid

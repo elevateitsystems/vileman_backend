@@ -32,19 +32,37 @@ export class CategoryService extends BaseService<
   public async createCategory(
     data: CreateCategoryInput,
     userId: string,
-
+    imageFile: Express.Multer.File | undefined,
     include?: any,
   ) {
     // ✅ Generate slug
     const slug = await this.generateUniqueSlug(data.name);
+    let imageData;
+    if (imageFile?.path) {
+      const uploaded = await uploadToLocal(
+        `${data.name}_${Date.now()}`,
+        imageFile.path,
+        "category",
+      );
 
+      imageData = {
+        create: {
+          url: uploaded.url,
+          publicId: uploaded.publicId,
+          type: "category",
+        },
+      };
+    }
+
+    // ✅ Add image relation data to category creation
     // ✅ Create with relation + createdBy
     return await super.create(
       {
         ...data,
         slug,
         createdById: userId,
-      },
+        image: imageData,
+      } as any,
       include,
     );
   }
@@ -57,12 +75,14 @@ export class CategoryService extends BaseService<
   ) {
     return super.findMany(filters, pagination, orderBy, {
       ...include,
+      image: true,
     });
   }
 
   public async findById(id: string, include?: any) {
     return super.findById(id, {
       ...include,
+      image: true,
     });
   }
 

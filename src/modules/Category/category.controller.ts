@@ -15,10 +15,10 @@ export class CategoryController extends BaseController {
   public create = async (req: Request, res: Response) => {
     const body = req.validatedBody;
     const userId = (req as any).user?.id; // from JWT middleware
+    const imageFile = req.file; // from multer middleware
+    this.logAction("create", req, { body, userId, imageFile });
 
-    this.logAction("create", req, { body, userId });
-
-    const result = await this.service.createCategory(body, userId);
+    const result = await this.service.createCategory(body, userId, imageFile);
 
     return this.sendCreatedResponse(
       res,
