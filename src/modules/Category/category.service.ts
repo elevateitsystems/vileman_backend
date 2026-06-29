@@ -1,5 +1,5 @@
 import { BaseService } from "@/core/BaseService";
-import { PrismaClient } from "@/generated/prisma/client";
+import { ImageType, PrismaClient } from "@/generated/prisma/client";
 import { PaginationOptions } from "@/types/types";
 import {
   CreateCategoryInput,
@@ -49,7 +49,7 @@ export class CategoryService extends BaseService<
         create: {
           url: uploaded.url,
           publicId: uploaded.publicId,
-          type: "category",
+          type: ImageType.category,
         },
       };
     }
@@ -90,22 +90,70 @@ export class CategoryService extends BaseService<
     id: string,
     data: UpdateCategoryInput,
     include?: any,
+    imageFile?: Express.Multer.File,
   ) {
-    // 1️⃣ Fetch existing category with image relation
-    const existing = await this.getModel().findUnique({
+    // 1. Get existing category with image
+    const existing = await this.prisma.category.findUnique({
       where: { id },
+      include: {
+        image: true,
+      },
     });
 
-    if (!existing) throw new Error("Category not found");
+    if (!existing) {
+      throw new Error("Category not found");
+    }
 
-    // 4️⃣ Update category with new data + image relation
-    return super.updateById(
-      id,
-      {
+    let imageUpdateData = {};
+
+    // 2. If new image uploaded
+    if (imageFile) {
+      // Delete old image if exists
+      if (existing.image) {
+        if (existing.image.publicId) {
+          await deleteLocalFile(existing.image.publicId, "categories");
+        }
+
+        await this.prisma.image.delete({
+          where: {
+            id: existing.image.id,
+          },
+        });
+      }
+
+      // Upload new image
+      const uploadedImage = await uploadToLocal(
+        data.name || existing.name,
+        imageFile.path,
+        "categories",
+      );
+
+      // Create new image
+      const newImage = await this.prisma.image.create({
+        data: {
+          url: uploadedImage.url,
+          publicId: uploadedImage.publicId,
+          type: ImageType.category,
+          category: {
+            connect: { id },
+          },
+        },
+      });
+
+      imageUpdateData = {
+        imageId: newImage.id,
+      };
+    }
+
+    // 3. Update category
+    return this.prisma.category.update({
+      where: { id },
+      data: {
         ...data,
-      } as any,
+        ...imageUpdateData,
+      },
       include,
-    );
+    });
   }
 
   public async deleteById(id: string, isDeleted: boolean = true) {

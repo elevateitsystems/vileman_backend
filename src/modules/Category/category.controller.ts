@@ -90,11 +90,15 @@ export class CategoryController extends BaseController {
   /**
    * Update Category
    */
-  public update = async (req: Request, res: Response) => {
+  public update = async (
+    req: Request,
+    res: Response,
+    imageFile?: Express.Multer.File,
+  ) => {
     const { id } = req.validatedParams;
     const body = req.validatedBody;
-
-    this.logAction("update", req, { id, body });
+    imageFile = imageFile || req.file;
+    this.logAction("update", req, { id, body, imageFile });
 
     const exists = await this.service.exists({ id });
     if (!exists) {
@@ -105,7 +109,7 @@ export class CategoryController extends BaseController {
       );
     }
 
-    const result = await this.service.updateCategoryById(id, body);
+    const result = await this.service.updateCategoryById(id, body, imageFile);
 
     return this.sendResponse(
       res,

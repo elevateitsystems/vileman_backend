@@ -52,7 +52,7 @@ export class CategoryRoutes {
     this.router.patch(
       "/:id",
       authenticate,
-      // authorize("admin"),
+      upload.single("image"),
       updateValidator,
       asyncHandler((req, res) => this.controller.update(req, res)),
     );
