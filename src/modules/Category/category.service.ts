@@ -89,73 +89,47 @@ export class CategoryService extends BaseService<
   public async updateCategoryById(
     id: string,
     data: UpdateCategoryInput,
-    include?: any,
     imageFile?: Express.Multer.File,
+    include?: any,
   ) {
-    // 1. Get existing category with image
     const existing = await this.prisma.category.findUnique({
       where: { id },
-      include: {
-        image: true,
-      },
+      include: { image: true },
     });
-
-    if (!existing) {
-      throw new Error("Category not found");
-    }
-
-    let imageUpdateData = {};
-
-    // 2. If new image uploaded
+    console.log({ existing });
+    if (!existing) throw new Error("Category not found");
+    console.log({ imageFile });
     if (imageFile) {
-      // Delete old image if exists
       if (existing.image) {
-        if (existing.image.publicId) {
-          await deleteLocalFile(existing.image.publicId, "categories");
-        }
-
         await this.prisma.image.delete({
-          where: {
-            id: existing.image.id,
-          },
+          where: { id: existing.image.id },
         });
       }
 
-      // Upload new image
-      const uploadedImage = await uploadToLocal(
+      const uploaded = await uploadToLocal(
         data.name || existing.name,
         imageFile.path,
-        "categories",
+        "category",
       );
-
-      // Create new image
-      const newImage = await this.prisma.image.create({
+      console.log({ uploaded });
+      await this.prisma.image.create({
         data: {
-          url: uploadedImage.url,
-          publicId: uploadedImage.publicId,
+          url: uploaded.url,
+          publicId: uploaded.publicId,
           type: ImageType.category,
           category: {
             connect: { id },
           },
         },
       });
-
-      imageUpdateData = {
-        imageId: newImage.id,
-      };
     }
 
-    // 3. Update category
     return this.prisma.category.update({
       where: { id },
-      data: {
-        ...data,
-        ...imageUpdateData,
-      },
-      include,
+      data,
+      include: { image: true },
     });
   }
-
   public async deleteById(id: string, isDeleted: boolean = true) {
     return super.updateById(id, { isDeleted: isDeleted });
   }

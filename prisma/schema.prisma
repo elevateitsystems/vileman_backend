@@ -101,7 +101,6 @@ model Category {
   name          String
   slug          String        @unique
   description   String?
-  imageId       String?       @unique @db.Uuid
   image         Image?
   subCategory SubCategory[]
   products      Product[]
